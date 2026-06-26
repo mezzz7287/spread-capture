@@ -112,6 +112,33 @@ def _parse_bool_env(name: str, default: bool) -> bool:
     return raw.lower() in ("1", "true", "yes", "on")
 
 
+def _load_env_sizing_overrides() -> Optional[dict[str, float]]:
+    """Apply sizing overrides only when ORDER_SIZE_MIN, ORDER_SIZE_MAX, and MAX_SHARES are all set."""
+    keys = ("ORDER_SIZE_MIN", "ORDER_SIZE_MAX", "MAX_SHARES")
+    raw = {k: os.getenv(k, "").strip() for k in keys}
+    set_keys = [k for k, v in raw.items() if v]
+    if not set_keys:
+        return None
+    if len(set_keys) != len(keys):
+        _fatal(
+            "ORDER_SIZE_MIN, ORDER_SIZE_MAX, and MAX_SHARES must all be set together "
+            f"to override sizing (found: {', '.join(set_keys)}). "
+            "Omit all three to use trading_config.json defaults."
+        )
+    out: dict[str, float] = {
+        "spread_size_min": _parse_order_size("ORDER_SIZE_MIN", raw["ORDER_SIZE_MIN"], 0.0),
+        "spread_size_max": _parse_order_size("ORDER_SIZE_MAX", raw["ORDER_SIZE_MAX"], 0.0),
+        "max_shares": _parse_max_shares("MAX_SHARES", raw["MAX_SHARES"], 0.0),
+    }
+    optional_max_order = os.getenv("MAX_ORDER_SIZE", "").strip()
+    if optional_max_order:
+        out["max_order_size"] = _parse_order_size("MAX_ORDER_SIZE", optional_max_order, 0.0)
+    return out
+
+
+ENV_SIZING_OVERRIDES: Optional[dict[str, float]] = _load_env_sizing_overrides()
+
+
 DRY_RUN_DEFAULT: bool = _parse_bool_env("DRY_RUN_DEFAULT", _parse_bool_env("DRY_MODE", True))
 
 
@@ -121,7 +148,8 @@ class WorkerConfig:
     window: str
     spread_threshold: float = 0.03
     trade_cooldown_ms: int = 3000
-    spread_size: float = 10.0
+    spread_size_min: float = 10.0
+    spread_size_max: float = 10.0
     max_order_size: float = 10.0
     max_shares: float = 10.2
     price_bias: float = 0.01
@@ -142,6 +170,14 @@ class WorkerConfig:
 
     def market_slug(self, start_ts: int) -> str:
         return f"{self.asset}-updown-{self.window}-{start_ts}"
+
+    @property
+    def spread_size(self) -> float:
+        return self.spread_size_max
+
+    @property
+    def random_order_size(self) -> bool:
+        return self.spread_size_min < self.spread_size_max - 1e-9
 
 
 def _merge_worker_entry(raw: dict, defaults: dict) -> WorkerConfig:
@@ -167,11 +203,26 @@ def _merge_worker_entry(raw: dict, defaults: dict) -> WorkerConfig:
         raw.get("trade_cooldown_ms", defaults.get("trade_cooldown_ms")),
         int(defaults.get("trade_cooldown_ms", 3000)),
     )
-    spread_size = _parse_order_size(
+    spread_size_fixed = _parse_order_size(
         "spread_size",
         raw.get("spread_size", defaults.get("spread_size")),
         float(defaults.get("spread_size", 10.0)),
     )
+    size_min_raw = raw.get("spread_size_min", defaults.get("spread_size_min"))
+    size_max_raw = raw.get("spread_size_max", defaults.get("spread_size_max"))
+    if size_min_raw is None and size_max_raw is None:
+        spread_size_min = spread_size_max = spread_size_fixed
+    else:
+        spread_size_min = _parse_order_size(
+            "spread_size_min",
+            size_min_raw if size_min_raw is not None else spread_size_fixed,
+            spread_size_fixed,
+        )
+        spread_size_max = _parse_order_size(
+            "spread_size_max",
+            size_max_raw if size_max_raw is not None else spread_size_fixed,
+            spread_size_fixed,
+        )
     max_order = _parse_order_size(
         "max_order_size",
         raw.get("max_order_size", defaults.get("max_order_size")),
@@ -182,11 +233,20 @@ def _merge_worker_entry(raw: dict, defaults: dict) -> WorkerConfig:
         raw.get("max_shares", defaults.get("max_shares")),
         float(defaults.get("max_shares", 10.2)),
     )
-    if spread_size > max_order:
+
+    if ENV_SIZING_OVERRIDES:
+        spread_size_min = ENV_SIZING_OVERRIDES["spread_size_min"]
+        spread_size_max = ENV_SIZING_OVERRIDES["spread_size_max"]
+        max_shares = ENV_SIZING_OVERRIDES["max_shares"]
+        if "max_order_size" in ENV_SIZING_OVERRIDES:
+            max_order = ENV_SIZING_OVERRIDES["max_order_size"]
+
+    if spread_size_min > spread_size_max:
         _fatal(
-            f"{asset}:{window}: spread_size ({spread_size}) "
-            f"cannot exceed max_order_size ({max_order})"
+            f"{asset}:{window}: spread_size_min ({spread_size_min}) "
+            f"cannot exceed spread_size_max ({spread_size_max})"
         )
+    max_order = max(max_order, spread_size_max)
     if max_order > max_shares:
         _fatal(
             f"{asset}:{window}: max_order_size ({max_order}) "
@@ -245,7 +305,8 @@ def _merge_worker_entry(raw: dict, defaults: dict) -> WorkerConfig:
         window=window,
         spread_threshold=spread_threshold,
         trade_cooldown_ms=trade_cooldown_ms,
-        spread_size=spread_size,
+        spread_size_min=spread_size_min,
+        spread_size_max=spread_size_max,
         max_order_size=max_order,
         max_shares=max_shares,
         price_bias=price_bias,
@@ -371,3 +432,20 @@ print(
     f"cooldown {ASSET_COOLDOWN_MINUTES} min (per asset+window)"
 )
 print(f"🧪 DRY_RUN_DEFAULT={DRY_RUN_DEFAULT}")
+if WORKER_CONFIGS:
+    wc0 = WORKER_CONFIGS[0]
+    if ENV_SIZING_OVERRIDES:
+        size_label = (
+            f"{wc0.spread_size_min}-{wc0.spread_size_max} random"
+            if wc0.random_order_size
+            else str(wc0.spread_size_max)
+        )
+        print(
+            f"📐 Sizing (.env override): order={size_label} | "
+            f"max_order={wc0.max_order_size} | max_shares={wc0.max_shares}"
+        )
+    else:
+        print(
+            f"📐 Sizing (trading_config.json): order={wc0.spread_size_max} fixed | "
+            f"max_order={wc0.max_order_size} | max_shares={wc0.max_shares}"
+        )

@@ -3,6 +3,7 @@ import json
 import logging
 import math
 import os
+import random
 import re
 import threading
 import requests  # type: ignore
@@ -2453,14 +2454,19 @@ class MarketWorker:
         return self.worker_config.dry_run
 
     def spread_order_size(self, legs: List[str]) -> Optional[float]:
-        """Clamp order size to per-leg headroom under max_shares."""
+        """Pick order size (random in configured range) and clamp to headroom."""
         wc = self.worker_config
+        if wc.random_order_size:
+            target = random.uniform(wc.spread_size_min, wc.spread_size_max)
+            target = round(target, 1)
+        else:
+            target = float(wc.spread_size_max)
         per_leg: List[float] = []
         for side in legs:
             room = self.spread_inventory.headroom(side, wc.max_shares)
             if room < MIN_SHARES:
                 return None
-            per_leg.append(min(float(wc.spread_size), room, float(wc.max_order_size)))
+            per_leg.append(min(target, room, float(wc.max_order_size)))
         size = min(per_leg)
         if size < MIN_SHARES:
             return None
@@ -3385,7 +3391,14 @@ class MarketWorker:
         print(f"  Market interval   : {self.window_slug} ({wc.interval_seconds}s)")
         print(f"  Listener window   : final {wc.listener_activate_secs}s")
         print(f"  Spread threshold  : {wc.spread_threshold:.4f} ({wc.spread_threshold*100:.1f}c edge)")
-        print(f"  Order size        : {wc.spread_size} shares (max order {wc.max_order_size})")
+        if wc.random_order_size:
+            order_size_label = (
+                f"{wc.spread_size_min}-{wc.spread_size_max} shares random "
+                f"(max order {wc.max_order_size})"
+            )
+        else:
+            order_size_label = f"{wc.spread_size_max} shares (max order {wc.max_order_size})"
+        print(f"  Order size        : {order_size_label}")
         print(f"  Max inventory     : {wc.max_shares} shares per leg")
         print(f"  Cooldown          : {wc.trade_cooldown_ms}ms after dual leg")
         if self.is_dry_run():
