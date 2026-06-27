@@ -1059,6 +1059,20 @@ def _load_trades_for_asset(asset: str, window: str = "5m") -> List[Dict]:
     return []
 
 
+def compute_biggest_realized_win() -> float:
+    """Largest single-trade realized profit across all workers (Redis/local PnL records)."""
+    best = 0.0
+    for wc in WORKER_CONFIGS:
+        for trade in _load_trades_for_asset(wc.asset, wc.window):
+            pnl = trade.get("pnl")
+            if pnl is None or not _is_finite_number(pnl):
+                continue
+            v = float(pnl)
+            if v > best:
+                best = v
+    return best
+
+
 def _build_equity_curve(all_trades_by_asset: Dict[str, List[Dict]]) -> List[Dict]:
     """
     Given {asset: [trade, ...]}, build a time-sorted portfolio equity curve.

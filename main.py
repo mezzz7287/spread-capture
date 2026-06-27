@@ -71,6 +71,7 @@ try:
         collect_open_positions,
         get_trade_history,
         trade_history_backfill,
+        compute_biggest_realized_win,
         find_worker,
         find_worker_by_asset,
         asset_cooldown,
@@ -88,6 +89,9 @@ except ImportError:
 
     def trade_history_backfill() -> int:  # type: ignore
         return 0
+
+    def compute_biggest_realized_win() -> float:  # type: ignore
+        return 0.0
 
     def find_worker(workers, asset, window):  # type: ignore
         return None
@@ -357,8 +361,7 @@ async def broadcast_loop():
 
 
 def _compute_biggest_win() -> float:
-    trades = get_trade_history(200)
-    return max((t.get('pnl_dollars') or 0 for t in trades), default=0.0)
+    return compute_biggest_realized_win()
 
 
 def get_global_stats() -> dict:
@@ -547,6 +550,7 @@ HTML_CONTENT = r"""<!DOCTYPE html>
     .pm-balance-toggle:focus-visible { outline:2px solid #22c55e; outline-offset:2px; }
     .pm-big-val { font-family:'Inter',system-ui,sans-serif; font-size:40px; font-weight:800; line-height:1; letter-spacing:-.04em; }
     .pm-big-val.pos { color:#22c55e; } .pm-big-val.neg { color:#ef4444; } .pm-big-val.neu { color:#e4e4e7; }
+    .ps-stat-val { font-family:'Inter',system-ui,sans-serif; font-size:20px; font-weight:700; line-height:1.2; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
     .pm-change-lbl { font-family:'JetBrains Mono','Consolas',monospace; font-variant-numeric:tabular-nums; font-size:12px; font-weight:600; color:#71717a; letter-spacing:.01em; }
     .pm-change-lbl.pos { color:#22c55e; } .pm-change-lbl.neg { color:#ef4444; }
     .pm-chart-box { height:160px; position:relative; overflow:hidden; margin-top:12px; }
@@ -644,17 +648,17 @@ HTML_CONTENT = r"""<!DOCTYPE html>
     <div class="flex flex-col gap-1">
       <span class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500"
             style="font-family:'Inter',system-ui,sans-serif;">Positions Value</span>
-      <span class="pm-big-val text-zinc-200" id="ps-positions-value">$0.00</span>
+      <span class="ps-stat-val text-zinc-200" id="ps-positions-value">$0.00</span>
     </div>
     <div class="flex flex-col gap-1">
       <span class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500"
             style="font-family:'Inter',system-ui,sans-serif;">Biggest Win</span>
-      <span class="pm-big-val text-zinc-200" id="ps-biggest-win">$0.00</span>
+      <span class="ps-stat-val text-zinc-200" id="ps-biggest-win">$0.00</span>
     </div>
     <div class="flex flex-col gap-1">
       <span class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500"
             style="font-family:'Inter',system-ui,sans-serif;">Predictions</span>
-      <span class="pm-big-val text-zinc-100" id="ps-predictions">0</span>
+      <span class="ps-stat-val text-zinc-100" id="ps-predictions">0</span>
     </div>
   </div>
 
@@ -1465,30 +1469,30 @@ function renderProfileStats(bots, g) {
   if (posEl) {
     if (!_balanceVisible) {
       posEl.textContent = _maskUsd();
-      posEl.className = 'pm-big-val text-zinc-200';
+      posEl.className = 'ps-stat-val text-zinc-200';
     } else {
       const n = positionsValue;
       posEl.textContent = (n >= 0 ? '' : '-') + '$' + Math.abs(n).toFixed(2);
-      posEl.className = 'pm-big-val ' + (n > 0 ? 'text-emerald-400' : n < 0 ? 'text-red-400' : 'text-zinc-200');
+      posEl.className = 'ps-stat-val ' + (n > 0 ? 'text-emerald-400' : n < 0 ? 'text-red-400' : 'text-zinc-200');
     }
   }
 
   if (winEl) {
     if (!_balanceVisible) {
       winEl.textContent = _maskUsd();
-      winEl.className = 'pm-big-val text-zinc-200';
+      winEl.className = 'ps-stat-val text-zinc-200';
     } else if (biggestWin === 0) {
       winEl.textContent = '$0.00';
-      winEl.className = 'pm-big-val text-zinc-200';
+      winEl.className = 'ps-stat-val text-zinc-200';
     } else {
       winEl.textContent = '+$' + biggestWin.toFixed(2);
-      winEl.className = 'pm-big-val text-emerald-400';
+      winEl.className = 'ps-stat-val text-emerald-400';
     }
   }
 
   if (predEl) {
     predEl.textContent = String(predictions);
-    predEl.className = 'pm-big-val text-zinc-100';
+    predEl.className = 'ps-stat-val text-zinc-100';
   }
 }
 
