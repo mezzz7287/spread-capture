@@ -604,6 +604,14 @@ HTML_CONTENT = r"""<!DOCTYPE html>
     .pm-big-val { font-family:'Inter',system-ui,sans-serif; font-size:40px; font-weight:800; line-height:1; letter-spacing:-.04em; }
     .pm-big-val.pos { color:var(--accent); } .pm-big-val.neg { color:#ef4444; } .pm-big-val.neu { color:#e4e4e7; }
     .ps-stat-val { font-family:'Inter',system-ui,sans-serif; font-size:20px; font-weight:700; line-height:1.2; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+    .ps-stat-val.pos { color:var(--accent); }
+    .ps-stat-val.neg { color:#ef4444; }
+    .ps-stat-val.neu { color:#e4e4e7; }
+    .pm-stat-num.pos { color:var(--accent); }
+    .text-accent { color:var(--accent); }
+    .border-l-accent { border-left-color:var(--accent); }
+    .badge-accent { background:var(--accent-glow); color:var(--accent); }
+    .conn-dot-on { background:var(--accent); }
     .pm-change-lbl { font-family:'JetBrains Mono','Consolas',monospace; font-variant-numeric:tabular-nums; font-size:12px; font-weight:600; color:#71717a; letter-spacing:.01em; }
     .pm-change-lbl.pos { color:var(--accent); } .pm-change-lbl.neg { color:#ef4444; }
     .pm-chart-box { height:160px; position:relative; overflow:hidden; margin-top:12px; }
@@ -711,12 +719,12 @@ HTML_CONTENT = r"""<!DOCTYPE html>
     <div class="flex flex-col gap-1">
       <span class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500"
             style="font-family:'Inter',system-ui,sans-serif;">Positions Value</span>
-      <span class="ps-stat-val text-zinc-200" id="ps-positions-value">$0.00</span>
+      <span class="ps-stat-val neu" id="ps-positions-value">$0.00</span>
     </div>
     <div class="flex flex-col gap-1">
       <span class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500"
             style="font-family:'Inter',system-ui,sans-serif;">Biggest Win</span>
-      <span class="ps-stat-val text-zinc-200" id="ps-biggest-win">$0.00</span>
+      <span class="ps-stat-val neu" id="ps-biggest-win">$0.00</span>
     </div>
     <div class="flex flex-col gap-1">
       <span class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500"
@@ -789,7 +797,7 @@ HTML_CONTENT = r"""<!DOCTYPE html>
         <span class="pm-stat-lbl">Trades</span>
       </div>
       <div class="pm-stat-item">
-        <span class="pm-stat-num text-emerald-400" id="pm-st-wins">0</span>
+        <span class="pm-stat-num pos" id="pm-st-wins">0</span>
         <span class="pm-stat-lbl">Wins</span>
       </div>
       <div class="pm-stat-item">
@@ -889,6 +897,7 @@ function setTheme(t) {
     b.classList.toggle('active', b.dataset.t === t);
   });
   schedulePnlChartUpdate(true);
+  refreshBalanceSensitiveUI();
 }
 function _loadTheme() {
   try {
@@ -1330,7 +1339,7 @@ let ws;
 function connect() {
   const proto = location.protocol==='https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws`);
-  ws.onopen  = () => connDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block';
+  ws.onopen  = () => connDot.className = 'w-2.5 h-2.5 rounded-full inline-block conn-dot-on';
   ws.onclose = () => {
     connDot.className = 'w-2.5 h-2.5 rounded-full bg-red-500 inline-block';
     setTimeout(connect, 2500);
@@ -1559,24 +1568,24 @@ function renderProfileStats(bots, g) {
   if (posEl) {
     if (!_balanceVisible) {
       posEl.textContent = _maskUsd();
-      posEl.className = 'ps-stat-val text-zinc-200';
+      posEl.className = 'ps-stat-val neu';
     } else {
       const n = positionsValue;
       posEl.textContent = (n >= 0 ? '' : '-') + '$' + _fmtMoney(Math.abs(n));
-      posEl.className = 'ps-stat-val ' + (n > 0 ? 'text-emerald-400' : n < 0 ? 'text-red-400' : 'text-zinc-200');
+      posEl.className = 'ps-stat-val ' + (n > 0 ? 'pos' : n < 0 ? 'neg' : 'neu');
     }
   }
 
   if (winEl) {
     if (!_balanceVisible) {
       winEl.textContent = _maskUsd();
-      winEl.className = 'ps-stat-val text-zinc-200';
+      winEl.className = 'ps-stat-val neu';
     } else if (biggestWin === 0) {
       winEl.textContent = '$0.00';
-      winEl.className = 'ps-stat-val text-zinc-200';
+      winEl.className = 'ps-stat-val neu';
     } else {
       winEl.textContent = '+$' + _fmtMoney(biggestWin);
-      winEl.className = 'ps-stat-val text-emerald-400';
+      winEl.className = 'ps-stat-val pos';
     }
   }
 
@@ -1747,7 +1756,7 @@ function renderCard(bot){
   const inCooldown=!!bot.cooldown_active;
   const cdPnl=Number(bot.cooldown_window_pnl)||0;
   const cdPnlPos=cdPnl>=0;
-  const border=inProfit?'border-l-4 border-emerald-500':inLoss?'border-l-4 border-red-500':inCooldown?'border-l-4 border-orange-500':hasPos?'border-l-4 border-sky-500':'';
+  const border=inProfit?'border-l-4 border-l-accent':inLoss?'border-l-4 border-red-500':inCooldown?'border-l-4 border-orange-500':hasPos?'border-l-4 border-sky-500':'';
   const edgeCents=(bot.spread_edge_cents!=null)?bot.spread_edge_cents:((bot.spread_edge||0)*100);
   const thrCents=(bot.spread_threshold_cents!=null)?bot.spread_threshold_cents:((bot.spread_threshold||0.03)*100);
   const edgeOk=!!bot.edge_above_threshold;
@@ -1766,7 +1775,7 @@ function renderCard(bot){
   const mw=formatMarketWindow(bot.market_start_iso,bot.market_end_iso);
   const label=`${bot.asset||'BOT'}`;
   const badge=inProfit
-    ?`<span class="text-xs bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded-full font-semibold">🟢 IN PROFIT</span>`
+    ?`<span class="text-xs badge-accent px-2 py-0.5 rounded-full font-semibold">🟢 IN PROFIT</span>`
     :inLoss
       ?`<span class="text-xs bg-red-950 text-red-400 px-2 py-0.5 rounded-full font-semibold">🔴 IN LOSS</span>`
       :inCooldown
@@ -1793,7 +1802,7 @@ function renderCard(bot){
       <div class="flex gap-3 mb-3">
         <div class="flex-1 bg-zinc-800 rounded-xl p-2 text-center">
           <div class="text-zinc-400 text-xs mb-0.5">YES</div>
-          <div class="text-lg font-bold text-emerald-400 font-mono" style="font-variant-numeric:tabular-nums;">${_displayYesNoPrice(bot.yes||0)}</div>
+          <div class="text-lg font-bold text-accent font-mono" style="font-variant-numeric:tabular-nums;">${_displayYesNoPrice(bot.yes||0)}</div>
         </div>
         <div class="flex-1 bg-zinc-800 rounded-xl p-2 text-center">
           <div class="text-zinc-400 text-xs mb-0.5">NO</div>
@@ -1805,7 +1814,7 @@ function renderCard(bot){
           ${sigIcon(signal)} ${signal}
         </span>
         <div class="text-xs text-zinc-400 font-mono">
-          live edge <span class="${edgeOk?'text-emerald-400':'text-zinc-300'}">${edgeCents.toFixed(2)}c</span>
+          live edge <span class="${edgeOk?'text-accent':'text-zinc-300'}">${edgeCents.toFixed(2)}c</span>
           &nbsp;· need <span class="text-cyan-400">&gt;${thrCents.toFixed(1)}c</span>
         </div>
       </div>
@@ -1823,32 +1832,32 @@ function renderCard(bot){
         </div>
         <div class="flex items-center justify-between">
           <span class="text-zinc-400">Trade PnL</span>
-          <span class="font-mono ${pnlPos?'text-emerald-400':'text-red-400'}" style="font-variant-numeric:tabular-nums;">
+          <span class="font-mono ${pnlPos?'text-accent':'text-red-400'}" style="font-variant-numeric:tabular-nums;">
             ${_displayTradePnl(bot.pnl_dollars, bot.pnl_pct)}
           </span>
         </div>
         <div class="flex items-center justify-between">
           <span class="text-zinc-400">Cumulative PnL</span>
-          <span class="font-mono font-semibold ${cumPos?'text-emerald-300':'text-red-300'}" style="font-variant-numeric:tabular-nums;">
+          <span class="font-mono font-semibold ${cumPos?'text-accent':'text-red-300'}" style="font-variant-numeric:tabular-nums;">
             ${_displayCumulativePnl(bot.cumulative_pnl)}
           </span>
         </div>
         <div class="flex items-center justify-between">
           <span class="text-zinc-400">Cooldown window PnL</span>
-          <span class="font-mono text-xs ${cdPnlPos?'text-emerald-400':'text-orange-400'}" style="font-variant-numeric:tabular-nums;" title="Resets after cooldown · limit -$${bot.cooldown_max_loss??''}">
+          <span class="font-mono text-xs ${cdPnlPos?'text-accent':'text-orange-400'}" style="font-variant-numeric:tabular-nums;" title="Resets after cooldown · limit -$${bot.cooldown_max_loss??''}">
             ${_displayCumulativePnl(cdPnl)}
           </span>
         </div>
         <div class="flex items-center justify-between">
           <span class="text-zinc-400">Outcome</span>
-          <span class="font-mono ${bot.outcome==='YES'?'text-emerald-400':bot.outcome==='NO'?'text-red-400':'text-zinc-500'}">
+          <span class="font-mono ${bot.outcome==='YES'?'text-accent':bot.outcome==='NO'?'text-red-400':'text-zinc-500'}">
             ${bot.outcome||'PENDING'}
           </span>
         </div>
       </div>
       <div class="bg-zinc-800/60 rounded-xl px-3 py-2 mb-3 flex items-center justify-between text-xs">
         <div class="flex flex-col items-center"><span class="font-bold text-zinc-200 font-mono">${trades}</span><span class="text-zinc-500 uppercase" style="font-size:9px;letter-spacing:.08em">Trades</span></div>
-        <div class="flex flex-col items-center"><span class="font-bold text-emerald-400 font-mono">${wins}</span><span class="text-zinc-500 uppercase" style="font-size:9px;letter-spacing:.08em">Wins</span></div>
+        <div class="flex flex-col items-center"><span class="font-bold text-accent font-mono">${wins}</span><span class="text-zinc-500 uppercase" style="font-size:9px;letter-spacing:.08em">Wins</span></div>
         <div class="flex flex-col items-center"><span class="font-bold text-red-400 font-mono">${losses}</span><span class="text-zinc-500 uppercase" style="font-size:9px;letter-spacing:.08em">Losses</span></div>
         <div class="flex flex-col items-center"><span class="font-bold text-yellow-400 font-mono">${wr.toFixed(1)}%</span><span class="text-zinc-500 uppercase" style="font-size:9px;letter-spacing:.08em">Win Rate</span></div>
       </div>
